@@ -28,3 +28,6 @@ pub mod serial;
 pub mod spi;
 
 mod sensor_util;
+
+mod analog_input;
+pub use self::analog_input::*;
