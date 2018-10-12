@@ -8,12 +8,11 @@ use std::{thread, time};
 use wpilib::*;
 
 fn main() {
-    let robot = RobotBase::new().expect("HAL FAILED");
+    let _robot = RobotBase::new();
     let mut out = DigitalOutput::new(1).expect("Could not make digital output");
-    RobotBase::start_competition();
 
     let mut val;
-    let ds = robot.get_ds_instance();
+    let ds = ds::DriverStation::get_instance();
     loop {
         {
             val = match ds.read().unwrap().get_state() {

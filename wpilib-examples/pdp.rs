@@ -8,9 +8,8 @@ use std::{thread, time};
 use wpilib::*;
 
 fn main() {
-    let _robot = RobotBase::new().expect("HAL FAILED");
+    let _robot = RobotBase::new();
     let pdp = PowerDistributionPanel::new().expect("Could not make PDP");
-    RobotBase::start_competition();
 
     loop {
         print_pdp_info(&pdp);

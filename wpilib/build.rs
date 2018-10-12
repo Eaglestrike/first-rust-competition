@@ -94,7 +94,6 @@ fn generate_bindings() {
     // println!("cargo:rerun-if-changed={}/*", INCLUDE_DIR);
     let bindings = bindgen::Builder::default()
         .derive_default(true)
-
         .rustfmt_bindings(false)
         .header(format!("{}{}", INCLUDE_DIR, "/hal/HAL.h"))
         .whitelist_type(SYMBOL_REGEX)

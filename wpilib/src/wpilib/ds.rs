@@ -28,13 +28,14 @@ License version 3 as published by the Free Software Foundation. See
 <https://www.gnu.org/licenses/> for a copy.
 */
 
-use super::robot_base::RobotBase;
-use super::time::Throttler;
 use hal::*;
 use std::ffi;
 use std::sync::*;
 use std::thread;
 use std::time;
+use super::robot_base::RobotBase;
+use super::time::Throttler;
+use std::process;
 
 const JOYSTICK_PORTS: usize = 6;
 const JOYSTICK_AXES: usize = 12;
@@ -102,8 +103,30 @@ pub struct DriverStation {
 
 pub type ThreadSafeDs = Arc<RwLock<DriverStation>>;
 
+lazy_static! {
+static ref instance: ThreadSafeDs =  {
+    if unsafe { HAL_Initialize(500, 0) } == 0 {
+        // Don't continue if the robot is dead before you even start.
+        eprintln!("HAL Initialized Failed");
+        process::exit(1);
+    }
+    report_usage(
+        resource_type!(Language),
+        resource_instance!(Language, CPlusPlus), // nUsageReporting_tInstances_kLanguage_CPlusPlus, // one day, we will have our own.
+    );
+    println!("\n********** Hardware Init **********\n");
+    let mut ds = Arc::new(RwLock::new(DriverStation::new()));
+    DriverStation::spawn_updater(&mut ds);
+    unsafe { HAL_ObserveUserProgramStarting();}
+        println!("\n********** Robot program starting **********\n");
+    ds
+};
+}
+
+
 impl DriverStation {
-    pub fn new() -> Self {
+    ///Get a new DriverStation.
+    fn new() -> Self {
         let ds = DriverStation {
             joysticks: Joysticks::default(),
             control_word: HAL_ControlWord::default(),
@@ -116,11 +139,16 @@ impl DriverStation {
         };
         ds
     }
+
+    pub fn get_instance() -> ThreadSafeDs {
+        instance.clone()
+    }
+
     /// Spawns a thread to read from the physical driver station and pass the data to the given
     /// virtual driverstation
     ///
     /// Meant for internal use only.
-    pub fn spawn_updater(ds: &mut Arc<RwLock<DriverStation>>) {
+    fn spawn_updater(ds: &mut Arc<RwLock<DriverStation>>) {
         let updater_pointer = ds.clone();
         let mut write_lock = ds.write().unwrap();
         if write_lock.join.is_some() {
@@ -222,9 +250,9 @@ impl DriverStation {
         if self
             .report_throttler
             .update(RobotBase::fpga_time().unwrap_or(0))
-        {
-            self.report(is_error, 1, message, "", "");
-        }
+            {
+                self.report(is_error, 1, message, "", "");
+            }
     }
 
     /// Get an axis on a joystick, in the range of [-1, 1].

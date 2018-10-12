@@ -30,7 +30,6 @@ License version 3 as published by the Free Software Foundation. See
 
 use super::ds::*;
 use hal::*;
-use std::sync::*;
 use std::time::Duration;
 
 pub struct RobotBase {
@@ -38,29 +37,15 @@ pub struct RobotBase {
 }
 
 impl RobotBase {
-    /// Create a new robot, initializing hardware in the process.
-    /// Call before initializing any other wpilib stuff.
-    pub fn new() -> Result<RobotBase, &'static str> {
-        if unsafe { HAL_Initialize(500, 0) } == 0 {
-            return Err("HAL Initialized Failed");
-        }
-        report_usage(
-            resource_type!(Language),
-            resource_instance!(Language, CPlusPlus), // nUsageReporting_tInstances_kLanguage_CPlusPlus, // one day, we will have our own.
-        );
-        println!("\n********** Hardware Init **********\n");
-        let mut ds = Arc::new(RwLock::new(DriverStation::new()));
-        DriverStation::spawn_updater(&mut ds);
-        Ok(RobotBase { ds })
+    /// Create a new robot
+    pub fn new() -> Self {
+        RobotBase { ds: DriverStation::get_instance() }
     }
 
     /// Call when your robot is ready to be enabled.
     /// Make sure your hardware and threads have been created, etc.
     pub fn start_competition() {
-        unsafe {
-            HAL_ObserveUserProgramStarting();
-        }
-        println!("\n********** Robot program starting **********\n");
+        eprintln!("\nwpilib::RobotBase::start_competition is deprecated. It is now completed on program init.\n");
     }
 
     pub fn get_ds_instance(&self) -> ThreadSafeDs {

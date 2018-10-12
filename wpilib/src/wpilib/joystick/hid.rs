@@ -28,9 +28,8 @@ License version 3 as published by the Free Software Foundation. See
 <https://www.gnu.org/licenses/> for a copy.
 */
 
-use super::ds::*;
-use super::robot_base::*;
 use hal::*;
+use wpilib::ds::*;
 
 const RUMBLE_BASE: i32 = 65535;
 
@@ -43,24 +42,9 @@ pub enum JoystickSide {
     RightHand,
 }
 
-/// public trait that lays down base methods for joysticks
-pub trait JoystickBase {
-    /// get raw axis value from driverstation
-    fn get_raw_axis(&self, axis: usize) -> Result<f32, JoystickError>;
-    /// get raw button value from driverstation
-    fn get_raw_button(&self, button: usize) -> Result<bool, JoystickError>;
-    /// get raw pov value from driverstation
-    fn get_pov(&self, pov: usize) -> Result<i16, JoystickError>;
-    /// set joystick output through hal
-    fn set_output(&mut self, output_number: i32, value: bool);
-    /// set joystick outputs through hal
-    fn set_outputs(&mut self, value: i64);
-    /// set joystick rumble on either side by a percentage from 0-100 through hal
-    fn set_rumble(&mut self, side: JoystickSide, value: f32);
-}
 
-/// stuct for almost any FRC legal joystick
-pub struct Joystick {
+/// Information that all HIDs have.
+pub struct GenericHIDData {
     port: usize,
     ds: ThreadSafeDs,
     outputs: i64,
@@ -68,65 +52,61 @@ pub struct Joystick {
     right_rumble: i32,
 }
 
-impl Joystick {
-    /// user creates a Joystick object here
-    pub fn new(rbase: &RobotBase, port: usize) -> Joystick {
-        Self::new_raw_ds(rbase.get_ds_instance(), port)
-    }
-
-    pub fn new_raw_ds(ds: ThreadSafeDs, port: usize) -> Joystick {
-        Joystick {
-            port: port,
-            ds,
-            outputs: 0i64,
-            left_rumble: 0i32,
-            right_rumble: 0i32,
-        }
-    }
+/// Bridge between instance variables and default implementation of hid. Created in order to make
+/// it only necessary to implement one version of GenericHID for multiple things which are HIDs,
+/// while still trying to keep the rust versions as similar to the originals as possible.
+pub trait GetHID {
+    fn get_hid_data(&self) -> &GenericHIDData;
+    fn get_hid_data_mut(&mut self) -> &mut GenericHIDData;
 }
 
-impl JoystickBase for Joystick {
+/// public trait that lays down base methods for joysticks
+pub trait GenericHID: GetHID {
+    /// get raw axis value from driverstation
     fn get_raw_axis(&self, axis: usize) -> Result<f32, JoystickError> {
-        let read_lock = self.ds.read().map_err(|_| JoystickError::DsUnreachable)?;
-        read_lock.get_joystick_axis(self.port, axis)
+        let read_lock = self.get_hid_data().ds.read().map_err(|_| JoystickError::DsUnreachable)?;
+        read_lock.get_joystick_axis(self.get_hid_data().port, axis)
     }
-
+    /// get raw button value from driverstation
     fn get_raw_button(&self, button: usize) -> Result<bool, JoystickError> {
-        let read_lock = self.ds.read().map_err(|_| JoystickError::DsUnreachable)?;
-        read_lock.get_joystick_button(self.port, button)
+        let read_lock = self.get_hid_data().ds.read().map_err(|_| JoystickError::DsUnreachable)?;
+        read_lock.get_joystick_button(self.get_hid_data().port, button)
     }
-
+    /// get raw pov value from driverstation
     fn get_pov(&self, pov: usize) -> Result<i16, JoystickError> {
-        let read_lock = self.ds.read().map_err(|_| JoystickError::DsUnreachable)?;
-        read_lock.get_joystick_pov(self.port, pov)
+        let read_lock = self.get_hid_data().ds.read().map_err(|_| JoystickError::DsUnreachable)?;
+        read_lock.get_joystick_pov(self.get_hid_data().port, pov)
     }
-
+    /// set joystick output through hal
     fn set_output(&mut self, output_number: i32, value: bool) {
-        let o = output_number - 1i32;
-        self.outputs = (self.outputs & (!(1i32 << o)) as i64) | ((value as i64) << o);
+        let o: i32 = output_number - 1i32;
+        let hid = self.get_hid_data_mut();
+        hid.outputs = (hid.outputs & (!(1i32 << o)) as i64) | ((value as i64) << o);
         unsafe {
             HAL_SetJoystickOutputs(
-                self.port as i32,
-                self.outputs,
-                self.left_rumble,
-                self.right_rumble,
+                hid.port as i32,
+                hid.outputs,
+                hid.left_rumble,
+                hid.right_rumble,
             );
         }
     }
-
+    /// set joystick outputs through hal
     fn set_outputs(&mut self, value: i64) {
-        self.outputs = value;
+        let hid = self.get_hid_data_mut();
+        hid.outputs = value;
         unsafe {
             HAL_SetJoystickOutputs(
-                self.port as i32,
-                self.outputs,
-                self.left_rumble,
-                self.right_rumble,
+                hid.port as i32,
+                hid.outputs,
+                hid.left_rumble,
+                hid.right_rumble,
             );
         }
     }
-
+    /// set joystick rumble on either side by a percentage from 0-100 through hal
     fn set_rumble(&mut self, side: JoystickSide, mut value: f32) {
+        let hid = self.get_hid_data_mut();
         value = if value > 1f32 {
             1f32
         } else if value < 0f32 {
@@ -135,16 +115,32 @@ impl JoystickBase for Joystick {
             value
         };
         match side {
-            JoystickSide::LeftHand => self.left_rumble = (value * RUMBLE_BASE as f32) as i32,
-            JoystickSide::RightHand => self.right_rumble = (value * RUMBLE_BASE as f32) as i32,
+            JoystickSide::LeftHand => hid.left_rumble = (value * RUMBLE_BASE as f32) as i32,
+            JoystickSide::RightHand => hid.right_rumble = (value * RUMBLE_BASE as f32) as i32,
         }
         unsafe {
             HAL_SetJoystickOutputs(
-                self.port as i32,
-                self.outputs,
-                self.left_rumble,
-                self.right_rumble,
+                hid.port as i32,
+                hid.outputs,
+                hid.left_rumble,
+                hid.right_rumble,
             )
         };
+    }
+    /// get the port of the hid from stored data
+    fn get_port(&self) -> usize {
+        self.get_hid_data().port
+    }
+}
+
+impl GenericHIDData {
+    pub fn new(port: usize) -> Self {
+        Self {
+            port,
+            ds: DriverStation::get_instance(),
+            outputs: 0i64,
+            left_rumble: 0i32,
+            right_rumble: 0i32,
+        }
     }
 }
