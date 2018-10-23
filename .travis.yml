@@ -5,11 +5,11 @@
 # option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-language: generic
+language: rust
+rust: nightly
 sudo: required
-services:
-  - docker
-
-script: |
-  if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then bash ./.ci/pull-request.sh; fi &&
-  if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then bash ./.ci/authorized.sh; fi
+cache: cargo
+script:
+  - apt-get install gcc-arm-linux-gnueabi
+  - cargo build --verbose --all
+  - cargo test --verbose --all
